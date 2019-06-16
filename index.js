@@ -3,12 +3,10 @@ const app = new Koa();
 const http = require('http');
 let server = http.createServer(app.callback());
 const io = require('socket.io').listen(server);
-const Router = require('koa-router');
-const dweetClient = require('node-dweetio');
 const nodemeiler = require('nodemailer');
 
 const router = new Router();
-const dweetio = new dweetClient();
+
 const fs = require('fs');
 const config = JSON.parse(fs.readFileSync('config.json'));
 
@@ -16,16 +14,6 @@ io.on('connection', function(socket) {
 	console.log('a user connected');
 });
 app.use(router.routes());
-let count = 0;
-const dataSec = () => {
-	setInterval(function() {
-		return io.emit('cname', count++);
-	}, 2000);
-};
-dataSec();
-
-///////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 let transporter = nodemeiler.createTransport({
 	service: 'gmail',
 	secure: false,
@@ -41,31 +29,22 @@ let transporter = nodemeiler.createTransport({
 let helperOptions = {
 	from: 'Igor Feshchenko nylis97@gmail.com',
 	to: config.mail,
-	subject: 'Hello',
-	text: 'Alarm!!!',
+	subject: 'Gas detected',
+	text: 'The sensor has detected gas',
 };
 
-function getDweet() {
-	setInterval(function() {
-		dweetio.get_latest_dweet_for('IgorFeshchenko', function(err, dweet) {
-			if (dweet[0].content.ppm > 11) {
-				transporter.sendMail(helperOptions, (error, info) => {
-					if (error) {
-						return console.log(error);
-					}
-					console.log('message was sent!');
-					console.log(info);
-				});
+router.post('/', async ctx => {
+	let gasValue = ctx.request.headers.val;
+	if (gasValue > 30) {
+		transporter.sendMail(helperOptions, (error, info) => {
+			if (error) {
+				return console.log(error);
 			}
-			console.log(dweet);
-			return io.emit('cname', dweet[0].content.ppm);
+			console.log('message was sent!');
+			console.log(info);
 		});
-	}, 2000);
-}
-getDweet();
-
-router.get('/', ctx => {
-	ctx.body = `hello + ${count}`;
+	}
+	return io.emit('cname', gasValue);
 });
 
 server.listen(3001, function() {
